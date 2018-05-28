@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Soundscape</string>
+    <string name="title_activity_maps">Map</string>
+    <string name="drawer_add_song">Add a Song</string>
+    <string name="drawer_view_soundscape">View Soundscape</string>
+    <string name="drawer_clear_soundscape">Clear Soundscape</string>
+    <string name="drawer_settings">Settings</string>
+</resources>
