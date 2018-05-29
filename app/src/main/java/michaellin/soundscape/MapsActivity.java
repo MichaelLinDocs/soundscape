@@ -3,44 +3,76 @@ package michaellin.soundscape;
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.location.Location;
 import android.location.LocationManager;
 import android.support.v4.app.ActivityCompat;
-import android.support.v4.app.FragmentActivity;
 import android.os.Bundle;
+import android.support.v4.widget.DrawerLayout;
+import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
+import android.view.Gravity;
+import android.view.MenuItem;
+import android.view.View;
+import android.widget.Button;
+import android.widget.SeekBar;
+import android.widget.TextView;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.Circle;
+import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 
-public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
+import java.util.ArrayList;
 
-    private GoogleMap soundmap;
+public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback {
+
     private static final String TAG = "MapsActivity";
+    private GoogleMap soundmap;
+    private DrawerLayout drawer_layout;
+    private Button confirm_location_button;
+    private Button cancel_location_button;
+    private ArrayList<Marker> marker_array;
+    private ArrayList<Circle> circle_array;
+    private Marker marker_buffer;
+    private TextView seekbar_label;
+    private TextView seekbar_percentage;
+    private SeekBar seekbar_radius;
+    private Circle circle_buffer;
+    private String percent_tracker;
+    private double percent_double;
+
+    @Override
+    public void onBackPressed() {}
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_maps);
-        // Obtain the SupportMapFragment and get notified when the map is ready to be used.
-        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
-                .findFragmentById(R.id.map);
+        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
-    }
-
-    @Override
-    public void onBackPressed() {
-
+        drawer_layout = findViewById(R.id.drawer_layout);
+        confirm_location_button = findViewById(R.id.confirm_button);
+        cancel_location_button = findViewById(R.id.cancel_button);
+        seekbar_label = findViewById(R.id.seekBarLabel);
+        seekbar_percentage = findViewById(R.id.seekBarPercent);
+        seekbar_radius = findViewById(R.id.radiusSeekBar);
+        marker_array = new ArrayList<>();
+        circle_array = new ArrayList<>();
+        percent_tracker = "0";
+        percent_double = 0;
     }
 
     @Override
     public void onMapReady(GoogleMap googleMap) {
         soundmap = googleMap;
         enableLocation();
+
         Location current_location = getCurrentLocation();
         if(current_location != null) {
             Log.i(TAG, "current_location successful");
@@ -51,6 +83,128 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             soundmap.moveCamera(CameraUpdateFactory.newLatLngZoom(current_coords, 16));
             soundmap.addMarker(marker_data);
         }
+    }
+
+    public void openDrawer(View view)
+    {
+        drawer_layout.openDrawer(Gravity.START);
+    }
+
+    public void addSong(MenuItem menuItem)
+    {
+        drawer_layout.closeDrawer(Gravity.START);
+        showPeripherals();
+        seekbar_percentage.setText(percent_tracker);
+
+        seekbar_radius.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int i, boolean b) {
+                String percent_buffer = '%' + Integer.toString(i);
+                seekbar_percentage.setText(percent_buffer);
+                percent_double = i;
+                percent_tracker = Integer.toString(i);
+                if(circle_buffer != null)
+                    circle_buffer.setRadius(i);
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+
+        soundmap.setOnMapClickListener(new GoogleMap.OnMapClickListener() {
+            @Override
+            public void onMapClick(LatLng latLng) {
+                if(circle_buffer != null)
+                    circle_buffer.remove();
+
+                if(marker_buffer != null)
+                    marker_buffer.remove();
+
+                marker_buffer = soundmap.addMarker(new MarkerOptions().position(latLng));
+                circle_buffer = soundmap.addCircle(new CircleOptions().center(latLng));
+
+                circle_buffer.setRadius(percent_double);
+                circle_buffer.setStrokeColor(Color.argb(255,80,180,255));
+                circle_buffer.setFillColor(Color.argb(125, 80, 180, 255));
+                circle_buffer.setStrokeWidth(2.0f);
+            }
+        });
+
+        confirm_location_button.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                //soundmap.setOnMapClickListener(new GoogleMap.OnMapClickListener() {@Override public void onMapClick(LatLng latLng) {}});
+
+                marker_array.add(marker_buffer);
+                circle_array.add(circle_buffer);
+                marker_buffer.remove();
+                circle_buffer.remove();
+                //hidePeripherals();
+                Log.i(TAG, marker_array.get(0).getPosition().toString());
+            }
+        });
+
+        cancel_location_button.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                soundmap.setOnMapClickListener(new GoogleMap.OnMapClickListener() {@Override public void onMapClick(LatLng latLng) {}});
+
+                marker_buffer.remove();
+                circle_buffer.remove();
+                hidePeripherals();
+            }
+        });
+    }
+
+    private void hidePeripherals()
+    {
+        confirm_location_button.setVisibility(View.GONE);
+        cancel_location_button.setVisibility(View.GONE);
+        seekbar_label.setVisibility(View.GONE);
+        seekbar_percentage.setVisibility(View.GONE);
+        seekbar_radius.setVisibility(View.GONE);
+    }
+
+    private void showPeripherals()
+    {
+        confirm_location_button.setVisibility(View.VISIBLE);
+        cancel_location_button.setVisibility(View.VISIBLE);
+        seekbar_radius.setVisibility(View.VISIBLE);
+        seekbar_percentage.setVisibility(View.VISIBLE);
+        seekbar_label.setVisibility(View.VISIBLE);
+    }
+
+    public void viewSoundscape(MenuItem menuItem)
+    {
+        hidePeripherals();
+        drawer_layout.closeDrawer(Gravity.START);
+        for(Marker marker : marker_array) {
+            soundmap.addMarker(new MarkerOptions().position(marker.getPosition()));
+        }
+        for(Circle circle: circle_array) {
+            soundmap.addCircle(new CircleOptions()
+                    .center(circle.getCenter())
+                    .fillColor(circle.getFillColor())
+                    .radius(circle.getRadius())
+                    .strokeColor(circle.getStrokeColor())
+                    .strokeWidth(circle.getStrokeWidth())
+            );
+        }
+    }
+
+    public void clearSoundscape(MenuItem menuItem)
+    {
+        hidePeripherals();
+        drawer_layout.closeDrawer(Gravity.START);
+        soundmap.clear();
+    }
+
+    public void accessSettings(MenuItem menuItem)
+    {
+        hidePeripherals();
+        drawer_layout.closeDrawer(Gravity.START);
     }
 
     private void enableLocation() {

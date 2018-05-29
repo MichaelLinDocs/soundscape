@@ -4,18 +4,22 @@
         <item
             android:id="@+id/nav_camera"
             android:icon="@drawable/ic_launcher_foreground"
-            android:title="@string/drawer_add_song" />
+            android:title="@string/drawer_add_song"
+            android:onClick="addSong"/>
         <item
             android:id="@+id/nav_gallery"
             android:icon="@drawable/ic_launcher_foreground"
-            android:title="@string/drawer_view_soundscape" />
+            android:title="@string/drawer_view_soundscape"
+            android:onClick="viewSoundscape"/>
         <item
             android:id="@+id/nav_slideshow"
             android:icon="@drawable/ic_launcher_foreground"
-            android:title="@string/drawer_clear_soundscape" />
+            android:title="@string/drawer_clear_soundscape"
+            android:onClick="clearSoundscape"/>
         <item
             android:id="@+id/nav_manage"
             android:icon="@drawable/ic_launcher_foreground"
-            android:title="@string/drawer_settings" />
+            android:title="@string/drawer_settings"
+            android:onClick="accessSettings"/>
     </group>
 </menu>
