@@ -21,7 +21,6 @@
             tools:context=".MapsActivity" />
 
         <android.support.design.widget.FloatingActionButton
-            android:id="@+id/floatingActionButton2"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_margin="5dp"
@@ -30,6 +29,17 @@
             android:onClick="openDrawer"
             app:backgroundTint="@android:color/background_light"
             app:srcCompat="@drawable/menu_icon" />
+
+        <android.support.design.widget.FloatingActionButton
+            android:id="@+id/playback_button"
+            android:layout_width="50dp"
+            android:layout_height="50dp"
+            android:layout_margin="100dp"
+            android:layout_gravity="end|bottom"
+            android:clickable="true"
+            android:focusable="true"
+            android:onClick="switchPlayback"
+            app:srcCompat="@drawable/play_icon" />
 
         <Button
             android:id="@+id/confirm_button"

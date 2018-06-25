@@ -2,20 +2,22 @@ package michaellin.soundscape;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.location.Location;
 import android.location.LocationManager;
-import android.media.MediaPlayer;
-import android.net.Uri;
+import android.os.IBinder;
 import android.provider.MediaStore;
+import android.support.design.widget.FloatingActionButton;
 import android.support.v4.app.ActivityCompat;
 import android.os.Bundle;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.AppCompatActivity;
-import android.util.Log;
+//import android.util.Log;
 import android.view.Gravity;
 import android.view.MenuItem;
 import android.view.View;
@@ -37,82 +39,83 @@ import java.util.ArrayList;
 
 public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback {
 
-    private static final String TAG = "MapsActivity";
+    //GoogleMap
+    private GoogleMap soundmap;
+
+    //Android UI variables
+    //private static final String TAG = "MapsActivity";
     private Button confirm_location_button;
     private Button cancel_location_button;
-    private Circle circle_buffer;
     private DrawerLayout drawer_layout;
-    private GoogleMap soundmap;
-    private Marker marker_buffer;
+    private FloatingActionButton playback_button;
     private SeekBar seekbar_radius;
     private TextView seekbar_label;
     private TextView seekbar_radius_text;
-
-    private ArrayList<SoundNode> node_array;
-    private double longitude_buffer;
-    private double latitude_buffer;
-    private double radius_buffer;
     private float stroke_width;
     private int fill_color;
     private int stroke_color;
-    private String radius_text;
 
+    //Android buffer variables
+    private Circle circle_buffer;
+    private Marker marker_buffer;
+
+    //Data buffer variables
+    private ArrayList<SoundNode> node_array;
+    private boolean playback_enabled;
+    private double longitude_buffer;
+    private double latitude_buffer;
+    private double radius_buffer;
+    private String radius_buffer_text;
+
+    //Playback service instance & variables
+    private NodePlaybackService playback_service;
+    private Intent playback_intent;
+    private boolean playback_service_bound;
+
+    //Disable back button
     @Override
     public void onBackPressed() {}
 
+    //Activity initialization
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+
+        //GoogleMap initialization
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_maps);
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
 
+        //Android UI initialization
         confirm_location_button = findViewById(R.id.confirm_button);
         cancel_location_button = findViewById(R.id.cancel_button);
         drawer_layout = findViewById(R.id.drawer_layout);
-        node_array = new ArrayList<>();
-        radius_text = "0";
-        radius_buffer = 0;
+        playback_button = findViewById(R.id.playback_button);
+        seekbar_radius = findViewById(R.id.radiusSeekBar);
         seekbar_label = findViewById(R.id.seekBarLabel);
         seekbar_radius_text = findViewById(R.id.seekBarPercent);
-        seekbar_radius = findViewById(R.id.radiusSeekBar);
+        stroke_width = 2.0f;
         fill_color = Color.argb(125, 80, 180, 255);
         stroke_color = Color.argb(255,80,180,255);
-        stroke_width = 2.0f;
+
+        //Data buffer initialization
+        node_array = new ArrayList<>();
+        playback_enabled = false;
+        radius_buffer = 0;
+        radius_buffer_text = "0";
     }
 
+    //GoogleMap object initialization
     @Override
     public void onMapReady(GoogleMap googleMap) {
         soundmap = googleMap;
-        enableLocation();
 
-        Location current_location = getCurrentLocation();
-        if(current_location != null) {
-            Log.i(TAG, "current_location successful");
-            LatLng current_coords = new LatLng(current_location.getLatitude(), current_location.getLongitude());
-            MarkerOptions marker_data = new MarkerOptions();
-            marker_data.position(current_coords).title("Current Location");
-            soundmap.moveCamera(CameraUpdateFactory.newLatLng(current_coords));
-            soundmap.moveCamera(CameraUpdateFactory.newLatLngZoom(current_coords, 16));
-            soundmap.addMarker(marker_data);
-        }
-    }
-
-    public void openDrawer(View view)
-    {
-        drawer_layout.openDrawer(Gravity.START);
-    }
-
-    public void addSong(MenuItem menuItem) {
-        drawer_layout.closeDrawer(Gravity.START);
-        seekbar_radius_text.setText(radius_text);
-        showPeripherals();
-
+        //Seekbar initialization
         seekbar_radius.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int i, boolean b) {
-                radius_text = '%' + Integer.toString(i);
-                seekbar_radius_text.setText(radius_text);
+                radius_buffer_text = '%' + Integer.toString(i);
+                seekbar_radius_text.setText(radius_buffer_text);
                 radius_buffer = i;
                 if(circle_buffer != null)
                     circle_buffer.setRadius(i);
@@ -123,40 +126,58 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             public void onStopTrackingTouch(SeekBar seekBar) {}
         });
 
+        //Confirm & Cancel button initialization
         confirm_location_button.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 if(marker_buffer != null && marker_buffer.isVisible()) {
                     Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Audio.Media.EXTERNAL_CONTENT_URI);
                     startActivityForResult(intent,1);
-
-                    marker_buffer.remove();
-                    circle_buffer.remove();
-                    marker_buffer.setVisible(false);
                 }
             }
         });
-
         cancel_location_button.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 hidePeripherals();
             }
         });
+
+        //Zoom into current location
+        enableLocation();
+        Location current_location = getCurrentLocation();
+        if(current_location != null) {
+            LatLng current_coords = new LatLng(current_location.getLatitude(), current_location.getLongitude());
+            soundmap.moveCamera(CameraUpdateFactory.newLatLng(current_coords));
+            soundmap.moveCamera(CameraUpdateFactory.newLatLngZoom(current_coords, 16));
+        }
     }
 
+    //Menu UI swipe open
+    public void openDrawer(View view) {
+        drawer_layout.openDrawer(Gravity.START);
+    }
+
+    //SoundNode addition
+    public void addSoundNode(MenuItem menuItem) {
+        soundmap.clear();
+        drawer_layout.closeDrawer(Gravity.START);
+        seekbar_radius_text.setText(radius_buffer_text);
+        showPeripherals();
+    }
+
+    //Receive and process URI link from audio file selection, save data to node buffer
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-
         if(requestCode == 1 && resultCode == Activity.RESULT_OK) {
             String uri_buffer = data.getDataString();
-            Log.i(TAG, "filepath: " + uri_buffer);
             SoundNode node_buffer = new SoundNode(latitude_buffer, longitude_buffer, radius_buffer, uri_buffer);
             node_array.add(node_buffer);
         }
     }
 
+    //Close and remove UI elements, disable OnMapClick
     private void hidePeripherals() {
         if(marker_buffer != null)
             marker_buffer.remove();
@@ -169,15 +190,18 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         seekbar_label.setVisibility(View.GONE);
         seekbar_radius_text.setVisibility(View.GONE);
         seekbar_radius.setVisibility(View.GONE);
+        playback_button.setVisibility(View.VISIBLE);
         soundmap.setOnMapClickListener(new GoogleMap.OnMapClickListener() {@Override public void onMapClick(LatLng latLng) {}});
     }
 
+    //Open and view UI elements, enable OnMapClick
     private void showPeripherals() {
         confirm_location_button.setVisibility(View.VISIBLE);
         cancel_location_button.setVisibility(View.VISIBLE);
         seekbar_radius.setVisibility(View.VISIBLE);
         seekbar_radius_text.setVisibility(View.VISIBLE);
         seekbar_label.setVisibility(View.VISIBLE);
+        playback_button.setVisibility(View.GONE);
         soundmap.setOnMapClickListener(new GoogleMap.OnMapClickListener() {
             @Override
             public void onMapClick(LatLng latLng) {
@@ -204,11 +228,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         });
     }
 
+    //Display all nodes, hide UI elements
     public void viewSoundscape(MenuItem menuItem) {
         hidePeripherals();
         drawer_layout.closeDrawer(Gravity.START);
         LatLng position_buffer;
-
         for(SoundNode node : node_array) {
             position_buffer = new LatLng(node.getLatitude(), node.getLongitude());
             soundmap.addMarker(new MarkerOptions()
@@ -220,48 +244,13 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                     .strokeColor(stroke_color)
                     .fillColor(fill_color));
         }
-
-        setPlayableMarkers();
     }
 
+    //Hide all nodes and UI elements
     public void clearSoundscape(MenuItem menuItem) {
         hidePeripherals();
         drawer_layout.closeDrawer(Gravity.START);
-        nonPlayableMarkers();
         soundmap.clear();
-    }
-
-    private void setPlayableMarkers() {
-        soundmap.setOnMarkerClickListener(new GoogleMap.OnMarkerClickListener() {
-            @Override
-            public boolean onMarkerClick(Marker marker) {
-                String getUri = null;
-                LatLng position_buffer;
-                for(SoundNode node : node_array) {
-                    position_buffer = new LatLng(node.getLatitude(), node.getLongitude());
-                    if(marker.getPosition() != null && marker.getPosition().equals(position_buffer))
-                    {
-                        getUri = node.getUriLink();
-                        break;
-                    }
-                }
-
-                if(getUri != null) {
-                    MediaPlayer mediaPlayer = MediaPlayer.create(getApplicationContext(), Uri.parse(getUri));
-                    mediaPlayer.start();
-                }
-                return true;
-            }
-        });
-    }
-
-    private void nonPlayableMarkers() {
-        soundmap.setOnMarkerClickListener(new GoogleMap.OnMarkerClickListener() {
-            @Override
-            public boolean onMarkerClick(Marker marker) {
-                return false;
-            }
-        });
     }
 
     public void accessSettings(MenuItem menuItem) {
@@ -298,4 +287,84 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
         return current_location;
     }
+
+    public void switchPlayback(View view) {
+        if(!playback_enabled) {
+            playback_button.setImageResource(R.drawable.pause_icon);
+            playback_enabled = true;
+            beginPlayback();
+        }
+        else {
+            playback_button.setImageResource(R.drawable.play_icon);
+            playback_enabled = false;
+            stopPlayback();
+        }
+    }
+
+    private ServiceConnection playback_connection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
+            NodePlaybackService.LocalBinder binder = (NodePlaybackService.LocalBinder) iBinder;
+            playback_service = binder.getService();
+            playback_service_bound = true;
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName componentName) {
+            playback_service_bound = false;
+        }
+    };
+
+    private void beginPlayback() {
+        playback_intent = new Intent(this, NodePlaybackService.class);
+        bindService(playback_intent, playback_connection, Context.BIND_AUTO_CREATE);
+        if(playback_service_bound)
+        {
+            playback_service.recvNodes(node_array);
+            startService(playback_intent);
+        }
+    }
+
+    private void stopPlayback() {
+        stopService(playback_intent);
+        unbindService(playback_connection);
+        playback_service_bound = false;
+    }
+
+    //Debug functions
+    /*
+
+    private void setPlayableMarkers() {
+        soundmap.setOnMarkerClickListener(new GoogleMap.OnMarkerClickListener() {
+            @Override
+            public boolean onMarkerClick(Marker marker) {
+                String getUri = null;
+                LatLng position_buffer;
+                for(SoundNode node : node_array) {
+                    position_buffer = new LatLng(node.getLatitude(), node.getLongitude());
+                    if(marker.getPosition() != null && marker.getPosition().equals(position_buffer)) {
+                        getUri = node.getUriLink();
+                        break;
+                    }
+                }
+
+                if(getUri != null) {
+                    MediaPlayer mediaPlayer = MediaPlayer.create(getApplicationContext(), Uri.parse(getUri));
+                    mediaPlayer.start();
+                }
+                return true;
+            }
+        });
+    }
+
+    private void nonPlayableMarkers() {
+        soundmap.setOnMarkerClickListener(new GoogleMap.OnMarkerClickListener() {
+            @Override
+            public boolean onMarkerClick(Marker marker) {
+                return false;
+            }
+        });
+    }
+
+    */
 }
